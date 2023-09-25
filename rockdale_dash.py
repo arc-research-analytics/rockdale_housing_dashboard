@@ -48,7 +48,7 @@ hide_default_format = """
                 padding-bottom: 1px;
                 padding-left: 40px;
                 padding-right: 40px;
-                padding-top: 50px;
+                padding-top: 20px;
             }
             [data-testid="stSidebar"] {
                 padding-left: 18px;
@@ -639,11 +639,11 @@ KPI_line_height = '30'  # vertical spacing between the KPI label and value
 
 # Calculate, style KPIs-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-# define columns for the first "row" of map, KPIs, and chart
+# define layout columns for the dashboard
 col1, col2, col3 = st.columns([
-    3,  # map column
+    2.9,  # map column
     0.1,  # spacer column
-    2.5  # KPI / chart column
+    2.7  # KPI / chart column
 ])
 
 # draw the KPIs in the second column
@@ -671,7 +671,7 @@ with col3:
     # put a vertical spacer between the KPIs and the plotly line chart
     subcol2.write("")
 
-# now draw the map & chart
+# logic to draw the map & chart based on 2D / 3D selection
 if map_view == '2D':
     col3.plotly_chart(plotly_charter(), use_container_width=True,
                       config={'displayModeBar': False})
@@ -680,7 +680,6 @@ if map_view == '2D':
         expander = st.expander("Notes")
         expander.markdown(
             f"<span style='color:#022B3A'> Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
-
 else:
     col1.pydeck_chart(mapper_3D(), use_container_width=True)
     with col1:
@@ -694,6 +693,6 @@ else:
 # draw logo at lower-right corner of dashboard
 im = Image.open('Content/logo.png')
 with col3:
-    subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
+    subcol1, subcol2, subcol3, subcol4 = st.columns([1, 1, 1, 1])
     subcol3.write("Powered by:")
-    subcol3.image(im, width=80)
+    subcol4.image(im, width=80)
