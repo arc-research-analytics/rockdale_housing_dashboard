@@ -9,14 +9,15 @@ import pydeck as pdk
 county_var = 'Rockdale'
 
 # global variables for the pydeck chropleth map
-latitude = 33.66
-longitude_2D = -84.04
-longitude_3D = -84.04
+latitude_2D = 33.66
+latitude_3D = 33.64
+longitude_2D = -84.035
+longitude_3D = -84.06
 min_zoom = 8
 max_zoom = 15
 zoom_2D = 10  # lower values zoom out, higher values zoom in
-zoom_3D = 10.5
-map_height = 550
+zoom_3D = 10.4
+map_height = 575
 
 # set choropleth colors for the map
 custom_colors = [
@@ -47,7 +48,7 @@ hide_default_format = """
                 padding-bottom: 1px;
                 padding-left: 40px;
                 padding-right: 40px;
-                padding-top: 10px;
+                padding-top: 50px;
             }
             [data-testid="stSidebar"] {
                 padding-left: 18px;
@@ -148,7 +149,7 @@ geography_included = st.sidebar.radio(
     'Geography included',
     ('Entire county', 'City/Region'),
     index=0,
-    help='Filter sales by location. Defaults to entire county. "City/Region" filter will allow multi-select of smaller groupings within the county.'
+    help='Filter sales by location. Defaults to entire county. "City/Region" filter will allow multi-select of smaller groupings of Census tracts within the county.'
 )
 
 # sub-geography options
@@ -276,28 +277,6 @@ def filter_data_map():
     return filtered_df, grouped_df
 
 
-# fire the function above to filter down the data, but not to group it, for the KPIs
-kpi_df = filter_data_map()[0]
-
-# calculate & format all necessary KPI values from the filtered data
-median_sf = '{:,.0f}'.format(kpi_df['square_feet'].median())
-median_vintage = '{:.0f}'.format(kpi_df['yr_built'].median())
-total_sales = '{:,.0f}'.format(kpi_df.shape[0])
-median_price_sf = '${:.0f}'.format(kpi_df['price_sf'].median())
-median_price = '${:,.0f}'.format(kpi_df['sale_price'].median())
-
-
-# calculate variables from the filtered dataframe that will drive the YoY change KPIs
-df_firstYear = kpi_df[kpi_df['year'] == years[0]]
-df_secondYear = kpi_df[kpi_df['year'] == years[1]]
-delta_total_sales = '{:.1%}'.format((df_secondYear['price_sf'].count() -
-                                     df_firstYear['price_sf'].count()) / df_firstYear['price_sf'].count())
-delta_price_sf = '{:.1%}'.format((df_secondYear['price_sf'].median() -
-                                  df_firstYear['price_sf'].median()) / df_firstYear['price_sf'].median())
-delta_price = '{:.2%}'.format((df_secondYear['sale_price'].median() -
-                               df_firstYear['sale_price'].median()) / df_firstYear['sale_price'].median())
-
-
 # function to display 2D map
 def mapper_2D():
 
@@ -333,7 +312,7 @@ def mapper_2D():
 
     # create map intitial state
     initial_view_state = pdk.ViewState(
-        latitude=latitude,
+        latitude=latitude_2D,
         longitude=longitude_2D,
         zoom=zoom_2D,
         max_zoom=max_zoom,
@@ -416,7 +395,7 @@ def mapper_3D():
 
     # create map intitial state
     initial_view_state = pdk.ViewState(
-        latitude=latitude,
+        latitude=latitude_3D,
         longitude=longitude_3D,
         zoom=zoom_3D,
         max_zoom=max_zoom,
@@ -466,6 +445,7 @@ def mapper_3D():
     return r
 
 
+# filter the data for the line chart
 def filter_data_chart():
 
     # read in dataframe
@@ -498,6 +478,7 @@ def filter_data_chart():
     return grouped_df
 
 
+# draw the line chart
 def plotly_charter():
 
     # read in the filtered & grouped data
@@ -525,7 +506,6 @@ def plotly_charter():
         df,
         x="year-month",
         y=dash_variable_dict[dash_variable][0],
-        # custom_data=['unique_ID']
     )
 
     # modify the line itself
@@ -538,12 +518,12 @@ def plotly_charter():
     )
 
     # set chart title style variables
-    chart_title_font_size = '17'
+    chart_title_font_size = '20'
     chart_title_color = '#FFFFFF'
     chart_title_font_weight = '650'
 
     chart_subtitle_font_size = '14'
-    chart_subtitle_color = '#022B3A'
+    chart_subtitle_color = '#FFFFFF'
     chart_subtitle_font_weight = '650'
 
     if sub_geo == "":
@@ -557,7 +537,7 @@ def plotly_charter():
 
     # update the fig
     fig.update_layout(
-        title_text=f'<span style="font-size:{chart_title_font_size}px; font-weight:{chart_title_font_weight}; color:{chart_title_color}">{chart_title_text}</span><br><span style="font-size:{chart_subtitle_font_size}px; font-weight:{chart_subtitle_font_weight}; color:{chart_subtitle_color}"><i>Orange lines reflect range of selected years</i></span>',
+        title_text=f'<span style="font-size:{chart_title_font_size}px; font-weight:{chart_title_font_weight}; color:{chart_title_color}">{chart_title_text}</span><br><span style="font-size:{chart_subtitle_font_size}px; font-weight:{chart_subtitle_font_weight}; color:{chart_subtitle_color}">(orange lines reflect range of selected years)</span>',
         title_x=0,
         title_y=0.93,
         margin=dict(
@@ -586,9 +566,9 @@ def plotly_charter():
             tickangle=90,
             tickfont_size=13,
             tickformat='%b %Y',
-            dtick='M3'
+            dtick='M6'
         ),
-        height=460,
+        height=480,
         hovermode="x unified")
 
     # add shifting vertical lines
@@ -618,21 +598,89 @@ def plotly_charter():
     return fig
 
 
+# Calculate, style KPIs-v-v-v-v-v-v-v-v-v-v-v-v-v
+kpi_df = filter_data_map()[0]
+
+# calculate & format all necessary KPI values from the filtered data
+median_vintage = '{:.0f}'.format(kpi_df['yr_built'].median())
+median_sf = '{:,.0f}'.format(kpi_df['square_feet'].median())
+total_sales = '{:,.0f}'.format(kpi_df.shape[0])
+median_price_sf = '${:.0f}'.format(kpi_df['price_sf'].median())
+median_price = '${:,.0f}'.format(kpi_df['sale_price'].median())
+
+
+# calculate variables from the filtered dataframe that will drive the YoY change KPIs
+df_firstYear = kpi_df[kpi_df['year'] == years[0]]
+df_secondYear = kpi_df[kpi_df['year'] == years[1]]
+delta_total_sales = '{:.1%}'.format((df_secondYear['price_sf'].count() -
+                                     df_firstYear['price_sf'].count()) / df_firstYear['price_sf'].count())
+delta_price_sf = '{:.1%}'.format((df_secondYear['price_sf'].median() -
+                                  df_firstYear['price_sf'].median()) / df_firstYear['price_sf'].median())
+delta_price = '{:.2%}'.format((df_secondYear['sale_price'].median() -
+                               df_firstYear['sale_price'].median()) / df_firstYear['sale_price'].median())
+
+# dictionary to pick out which KPI metrics to show
+KPI_dict = {
+    'Total sales': [total_sales, delta_total_sales],
+    'Price (per SF)': [median_price_sf, delta_price_sf],
+    'Price (overall)': [median_price, delta_price]
+}
+
+# kpi styles
+KPI_label_font_size = '19'
+KPI_label_font_color = '#FFFFFF'
+KPI_label_font_weight = '700'
+
+KPI_value_font_size = '25'
+KPI_value_font_color = '#022B3A'
+KPI_value_font_weight = '800'
+
+KPI_line_height = '30'  # vertical spacing between the KPI label and value
+
+# Calculate, style KPIs-^-^-^-^-^-^-^-^-^-^-^-^-^
+
 # define columns for the first "row" of map, KPIs, and chart
 col1, col2, col3 = st.columns([
     3,  # map column
-    0.2,  # spacer column
+    0.1,  # spacer column
     2.5  # KPI / chart column
 ])
 
+# draw the KPIs in the second column
+with col3:
+    subcol1, subcol2 = st.columns([1, 1])
+
+    # primary metric - based on the dashboard variable
+    subcol1.markdown(
+        f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>{dash_variable_dict[dash_variable][3]}</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{KPI_dict[dash_variable][0]}</span>", unsafe_allow_html=True)
+
+    # secondary metric - YoY change of dashboard variable, if applicable
+    if years[0] != years[1]:
+        subcol2.markdown(
+            f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>{years[0]} to {years[1]} change</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{KPI_dict[dash_variable][1]}</span>", unsafe_allow_html=True)
+    else:
+        subcol2.markdown(
+            f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>No year over year change<br>given slider selection.</span>", unsafe_allow_html=True)
+
+    # Metric to be kept constant regardless of dashboard variable (median vintage)
+    subcol1.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median vintage</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{median_vintage}</span>", unsafe_allow_html=True)
+
+    # Metric to be kept constant regardless of dashboard variable (median SF)
+    subcol2.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median size (SF)</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{median_sf}</span>", unsafe_allow_html=True)
+
+    # put a vertical spacer between the KPIs and the plotly line chart
+    subcol2.write("")
+
+# now draw the map & chart
 if map_view == '2D':
+    col3.plotly_chart(plotly_charter(), use_container_width=True,
+                      config={'displayModeBar': False})
     col1.pydeck_chart(mapper_2D(), use_container_width=True)
     with col1:
         expander = st.expander("Notes")
         expander.markdown(
             f"<span style='color:#022B3A'> Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
-    col3.plotly_chart(plotly_charter(), use_container_width=True,
-                      config={'displayModeBar': False})
+
 else:
     col1.pydeck_chart(mapper_3D(), use_container_width=True)
     with col1:
@@ -647,70 +695,5 @@ else:
 im = Image.open('Content/logo.png')
 with col3:
     subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
-    # with subcol
     subcol3.write("Powered by:")
     subcol3.image(im, width=80)
-
-# # kpi values
-# total_sales = '{:,.0f}'.format(filter_data()[1]['unique_ID'].sum())
-# median_price_SF = '${:.0f}'.format(filter_data()[2]['price_sf'].median())
-# median_price = '${:,.0f}'.format(filter_data()[2]['Sale Price'].median())
-# med_vintage = '{:.0f}'.format(filter_data()[2]['year_blt'].median())
-# med_SF = '{:,.0f}'.format(filter_data()[2]['Square Ft'].median())
-# YoY_delta = '{0:.1%}'.format((filter_data()[4]['price_sf'].median(
-# ) - filter_data()[3]['price_sf'].median()) / filter_data()[3]['price_sf'].median())
-
-# # kpi styles
-# KPI_label_font_size = '15'
-# KPI_label_font_color = '#FFFFFF'
-# KPI_label_font_weight = '700'  # thickness of the bold
-
-# KPI_value_font_size = '25'
-# KPI_value_font_color = '#022B3A'
-# KPI_value_font_weight = '800'  # thickness of the bold
-
-# KPI_line_height = '25'  # vertical spacing between the KPI label and value
-
-
-# # KPI tyme
-# with col3:
-#     subcol1, subcol2, subcol3, subcol4 = st.columns([1, 1, 1, 1])
-
-#     # first metric - "Total sales"
-#     subcol1.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Total home sales</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{total_sales}</span>", unsafe_allow_html=True)
-
-#     # second metric - "Median price"
-#     subcol2.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median sale price</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{median_price}</span>", unsafe_allow_html=True)
-
-#     # third metric - "Median vintage"
-#     subcol3.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median vintage</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{med_vintage}</span>", unsafe_allow_html=True)
-
-#     # fourth metric - "Median SF"
-#     subcol4.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median size (SF)</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{med_SF}</span>", unsafe_allow_html=True)
-
-#     # delta KPI, resting under the 4 KPIs above
-#     if years[0] != years[1]:
-#         col3.markdown(
-#             f"<span style='color:{KPI_label_font_color}; font-size: 17px; font-weight:{KPI_label_font_weight}; display: flex; justify-content: center; white-space:nowrap;'>Change in median price / SF from {years[0]} to {years[1]}: </span><span style='color:{KPI_value_font_color}; font-size: 25px; font-weight:{KPI_label_font_weight}; display:flex; justify-content:center; line-height:20px'>{YoY_delta} </span>", unsafe_allow_html=True)
-#     else:
-#         col3.markdown(
-#             f"<span style='color:{KPI_label_font_color}; font-size: 17px; font-weight:{KPI_label_font_weight}; display: flex; justify-content: center;'>No year over year change.</span>", unsafe_allow_html=True)
-
-
-# # draw the plotly line chart
-# col3.plotly_chart(charter(), use_container_width=True, config={
-#                   'displayModeBar': False})
-
-# # define columns for the second "row" of notes & logo
-# col1, col2 = st.columns([
-#     2,    # expander notes column
-#     1     # logo column
-# ])
-
-# # Draw ARC logo at the bottom of the page
-# im = Image.open('Content/logo.png')
-# with col2:
-#     subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
-#     # with subcol
-#     subcol2.write("Powered by:")
-#     subcol3.image(im, width=80)
