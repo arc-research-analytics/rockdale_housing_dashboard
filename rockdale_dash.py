@@ -5,16 +5,18 @@ import geopandas as gpd
 import plotly.express as px
 import pydeck as pdk
 
-# set global variables
+# global variable for county name
 county_var = 'Rockdale'
+
+# global variables for the pydeck chropleth map
 latitude = 33.66
 longitude_2D = -84.04
-longitude_3D = -83.54
+longitude_3D = -84.04
 min_zoom = 8
 max_zoom = 15
 zoom_2D = 10  # lower values zoom out, higher values zoom in
-zoom_3D = 8.5
-map_height = 565
+zoom_3D = 10.5
+map_height = 550
 
 # set choropleth colors for the map
 custom_colors = [
@@ -45,7 +47,7 @@ hide_default_format = """
                 padding-bottom: 1px;
                 padding-left: 40px;
                 padding-right: 40px;
-                padding-top: 50px;
+                padding-top: 10px;
             }
             [data-testid="stSidebar"] {
                 padding-left: 18px;
@@ -80,11 +82,11 @@ dash_variable = st.sidebar.radio(
     label_visibility='collapsed'
 )
 
-# dictionary for converting housing dashboard variables into actionable values
+# dictionary for converting housing dashboard variables into actionable values to be used in the mapping functions
 dash_variable_dict = {
-    'Total sales': ['yr_built', 'count', '{:,.0f}'],
-    'Price (per SF)': ['price_sf', 'median', '${:.2f}'],
-    'Price (overall)': ['sale_price', 'median', '${:,.0f}']
+    'Total sales': ['yr_built', 'count', '{:,.0f}', 'Total sales', ',.0f'],
+    'Price (per SF)': ['price_sf', 'median', '${:.2f}', 'Median price (per SF)', '$.0f'],
+    'Price (overall)': ['sale_price', 'median', '${:,.0f}', 'Median price (overall)', '$,.0f']
 }
 
 # # Sidebar divider #1
@@ -182,7 +184,7 @@ if dash_variable == 'Price (per SF)' or dash_variable == 'Price (overall)':
         help='Toggle 3D view to extrude map polygons showing "height" based on total number of home sales for the selected filters. Darker map colors correspond to higher median sales price / SF.'
     )
 else:
-    map_view = st.write('')
+    map_view = '2D'
 
 # dropdown to select the basemap
 base_map = st.sidebar.selectbox(
@@ -214,10 +216,6 @@ def load_tab_data():
     # drop Unnamed column, if it exists
     if any(df.columns.str.startswith('Unnamed')):
         df = df.loc[:, ~df.columns.str.startswith('Unnamed')]
-
-    # # create 'unique' field
-    # df['unique_ID'] = df['Parcel ID'].astype(
-    #     str) + '-' + df['sale_date'] + '-' + df['sale_price'].astype(str)
 
     # Drop the unneeded columns
     df.drop(
@@ -268,7 +266,10 @@ def filter_data_map():
         # this first agg will read the dash variable and make the correct calculation
         dash_variable_dict[dash_variable][0]: dash_variable_dict[dash_variable][1],
 
-        # this second agg will get the name of the sub geometry for each Census tract
+        # this second agg will add up the total sales in each CT
+        'yr_built': 'count',
+
+        # this third agg will get the name of the sub geometry for each Census tract
         'Sub_geo': pd.Series.mode
     }).reset_index()
 
@@ -282,8 +283,9 @@ kpi_df = filter_data_map()[0]
 median_sf = '{:,.0f}'.format(kpi_df['square_feet'].median())
 median_vintage = '{:.0f}'.format(kpi_df['yr_built'].median())
 total_sales = '{:,.0f}'.format(kpi_df.shape[0])
-median_price = '${:,.0f}'.format(kpi_df['sale_price'].median())
 median_price_sf = '${:.0f}'.format(kpi_df['price_sf'].median())
+median_price = '${:,.0f}'.format(kpi_df['sale_price'].median())
+
 
 # calculate variables from the filtered dataframe that will drive the YoY change KPIs
 df_firstYear = kpi_df[kpi_df['year'] == years[0]]
@@ -296,20 +298,92 @@ delta_price = '{:.2%}'.format((df_secondYear['sale_price'].median() -
                                df_firstYear['sale_price'].median()) / df_firstYear['sale_price'].median())
 
 
-# # colors to be used in the mapping functions
-# custom_colors = [
-#     '#97a3ab',  # lightest blue
-#     '#667883',
-#     '#37505d',
-#     '#022b3a'  # darkest blue
-# ]
-
-# # convert the above hex list to RGB values
-# custom_colors = [tuple(int(h.lstrip('#')[i:i+2], 16)
-#    for i in (0, 2, 4)) for h in custom_colors]
-
-
+# function to display 2D map
 def mapper_2D():
+
+    # tabular data
+    df = filter_data_map()[1]
+    df['GEOID'] = df['GEOID'].astype(str)
+
+    # read in geospatial
+    gdf = gpd.read_file('Geography/Rockdale_CTs.gpkg')
+
+    # join together the 2, and let not man put asunder
+    joined_df = gdf.merge(df, left_on='GEOID', right_on='GEOID')
+
+    # ensure we're working with a geodataframe
+    joined_df = gpd.GeoDataFrame(joined_df)
+
+    # gonna be ugly as sin, but format the proper column
+    joined_df['var_formatted'] = joined_df[dash_variable_dict[dash_variable][0]].apply(
+        lambda x: dash_variable_dict[dash_variable][2].format((x)))
+
+    # create a 'label' column for the above variable
+    joined_df['dashboard_var_label'] = joined_df[dash_variable_dict[dash_variable][0]].apply(
+        lambda x: dash_variable_dict[dash_variable][3].format((x)))
+
+    # set choropleth color
+    joined_df['choro_color'] = pd.cut(
+        joined_df[dash_variable_dict[dash_variable][0]],
+        bins=len(custom_colors),
+        labels=custom_colors,
+        include_lowest=True,
+        duplicates='drop'
+    )
+
+    # create map intitial state
+    initial_view_state = pdk.ViewState(
+        latitude=latitude,
+        longitude=longitude_2D,
+        zoom=zoom_2D,
+        max_zoom=max_zoom,
+        min_zoom=min_zoom,
+        pitch=0,
+        bearing=0,
+        height=map_height
+    )
+
+    # create the geojson layer which will be rendered
+    geojson = pdk.Layer(
+        "GeoJsonLayer",
+        joined_df,
+        pickable=True,
+        autoHighlight=True,
+        highlight_color=[255, 255, 255, 128],
+        opacity=0.5,
+        stroked=True,
+        filled=True,
+        get_fill_color='choro_color',
+        get_line_color=[255, 255, 255, 50],
+        line_width_min_pixels=1
+    )
+
+    # configure & customize the tooltip
+    tooltip = {
+        "html": "{dashboard_var_label}: <b>{var_formatted}</b><hr style='margin: 10px auto; opacity:0.5; border-top: 2px solid white; width:85%'>\
+                    Census Tract {GEOID} <br>\
+                    {Sub_geo}",
+        "style": {"background": "rgba(2,43,58,0.7)",
+                  "border": "1px solid white",
+                  "color": "white",
+                  "font-family": "Helvetica",
+                  "text-align": "center"
+                  },
+    }
+
+    # instantiate the map object to be rendered to the Streamlit dashboard
+    r = pdk.Deck(
+        layers=geojson,
+        initial_view_state=initial_view_state,
+        map_provider='mapbox',
+        map_style=base_map_dict[base_map],
+        tooltip=tooltip)
+
+    return r
+
+
+# function to display 3D map
+def mapper_3D():
 
     # tabular data
     df = filter_data_map()[1]
@@ -340,39 +414,38 @@ def mapper_2D():
         duplicates='drop'
     )
 
-    # st.write(joined_df.columns)
-    # st.write(dash_variable_dict[dash_variable][0])
-    # st.write(joined_df['var_formatted'][0])
-    # st.write(joined_df['choro_color'][1])
-
     # create map intitial state
     initial_view_state = pdk.ViewState(
         latitude=latitude,
-        longitude=longitude_2D,
-        zoom=zoom_2D,
+        longitude=longitude_3D,
+        zoom=zoom_3D,
         max_zoom=max_zoom,
         min_zoom=min_zoom,
-        pitch=0,
+        pitch=45,
         bearing=0,
         height=map_height
     )
 
+    # create geojson layer
     geojson = pdk.Layer(
         "GeoJsonLayer",
         joined_df,
         pickable=True,
         autoHighlight=True,
-        highlight_color=[255, 255, 255, 80],
+        highlight_color=[255, 255, 255, 90],
         opacity=0.5,
-        stroked=True,
+        stroked=False,
         filled=True,
+        wireframe=False,
+        extruded=True,
+        get_elevation='yr_built * 10',
         get_fill_color='choro_color',
-        get_line_color=[0, 0, 0, 255],
+        get_line_color='choro_color',
         line_width_min_pixels=1
     )
 
     tooltip = {
-        "html": "{dashboard_var_label}: <b>{var_formatted}</b><hr style='margin: 10px auto; opacity:0.5; border-top: 2px solid white; width:85%'>\
+        "html": "Median {dashboard_var_label}: <b>{var_formatted}</b><br>Total sales: <b>{yr_built}</b><hr style='margin: 10px auto; opacity:0.5; border-top: 2px solid white; width:85%'>\
                     Census Tract {GEOID} <br>\
                     {Sub_geo}",
         "style": {"background": "rgba(2,43,58,0.7)",
@@ -393,215 +466,190 @@ def mapper_2D():
     return r
 
 
-st.pydeck_chart(mapper_2D(), use_container_width=True)
+def filter_data_chart():
 
-# def mapper_3D():
+    # read in dataframe
+    df = df_init
 
-#     # tabular data
-#     df = filter_data()[1]
-#     df['GEOID'] = df['GEOID'].astype(str)
+    # get construction vintage lower / upper bounds
+    vintage_lower_bound = year_built_dict[year_built[0]][0]
+    vintage_upper_bound = year_built_dict[year_built[1]][1]
 
-#     # read in geospatial
-#     gdf = gpd.read_file('Geography/Forsyth_CTs.gpkg')
+    # Now apply filters based on transaction year, construction vintage, and sub-geography (if applicable)
+    if geography_included == 'City/Region':  # apply a sub-geography filter
+        filtered_df = df[
+            (df['yr_built'] >= vintage_lower_bound) &
+            (df['yr_built'] <= vintage_upper_bound) &
+            (df['Sub_geo'].isin(sub_geo))]
+    else:  # do not apply a sub-geography filter
+        filtered_df = df[
+            (df['yr_built'] >= vintage_lower_bound) &
+            (df['yr_built'] <= vintage_upper_bound)
+        ]
 
-#     # join together the 2, and let not man put asunder
-#     joined_df = gdf.merge(df, left_on='GEOID', right_on='GEOID')
+    # now group by month so we get a longitudinal trend for each variable that is selected
+    grouped_df = filtered_df.groupby('year-month').agg({
+        # this first agg will read the dash variable and make the correct calculation
+        dash_variable_dict[dash_variable][0]: dash_variable_dict[dash_variable][1],
+        'month': pd.Series.mode,
+        'year': pd.Series.mode
+    }).reset_index()
 
-#     # ensure we're working with a geodataframe
-#     joined_df = gpd.GeoDataFrame(joined_df)
-
-#     # format the column to show the price / SF
-#     joined_df['price_sf_formatted'] = joined_df['price_sf'].apply(
-#         lambda x: "${:.0f}".format((x)))
-
-#     # add 1,000 separator to column that will show total sales
-#     joined_df['total_sales'] = joined_df['unique_ID'].apply(
-#         lambda x: '{:,}'.format(x))
-
-#     # set choropleth color
-#     joined_df['choro_color'] = pd.cut(
-#         joined_df['price_sf'],
-#         bins=len(custom_colors),
-#         labels=custom_colors,
-#         include_lowest=True,
-#         duplicates='drop'
-#     )
-
-#     # set initial view state
-#     initial_view_state = pdk.ViewState(
-#         latitude=34.307054643497315,
-#         longitude=-84.10535919531371,
-#         zoom=9.2,
-#         max_zoom=15,
-#         min_zoom=8,
-#         pitch=45,
-#         bearing=0,
-#         height=565
-#     )
-
-#     # create geojson layer
-#     geojson = pdk.Layer(
-#         "GeoJsonLayer",
-#         joined_df,
-#         pickable=True,
-#         autoHighlight=True,
-#         highlight_color=[255, 255, 255, 90],
-#         opacity=0.5,
-#         stroked=False,
-#         filled=True,
-#         wireframe=False,
-#         extruded=True,
-#         get_elevation='unique_ID * 50',
-#         get_fill_color='choro_color',
-#         get_line_color='choro_color',
-#         line_width_min_pixels=1
-#     )
-
-#     tooltip = {
-#         "html": "Median price per SF: <b>{price_sf_formatted}</b><br>Total sales: <b>{total_sales}</b>",
-#         "style": {"background": "rgba(2,43,58,0.7)",
-#                   "border": "1px solid white",
-#                   "color": "white",
-#                   "font-family": "Helvetica",
-#                   "text-align": "center"
-#                   },
-#     }
-
-#     r = pdk.Deck(
-#         layers=geojson,
-#         initial_view_state=initial_view_state,
-#         map_provider='mapbox',
-#         map_style=base_map_dict[base_map],
-#         tooltip=tooltip)
-
-#     return r
+    return grouped_df
 
 
-# def charter():
-#     # test chart
-#     df = filter_data()[0]
+def plotly_charter():
 
-#     df_grouped = df.groupby('year-month').agg({
-#         'price_sf': 'median',
-#         'unique_ID': 'count',
-#         'month': pd.Series.mode,
-#         'year': pd.Series.mode,
-#     }).reset_index()
+    # read in the filtered & grouped data
+    df = filter_data_chart()
 
-#     # sort the data so that it's chronological
-#     df_grouped = df_grouped.sort_values(['year', 'month'])
+    # gonna be ugly as sin, but format the proper column
+    df['var_formatted'] = df[dash_variable_dict[dash_variable][0]].apply(
+        lambda x: dash_variable_dict[dash_variable][2].format((x)))
 
-#     fig = px.line(
-#         df_grouped,
-#         x="year-month",
-#         y='price_sf',
-#         custom_data=['unique_ID']
-#     )
+    # create a 'label' column for the above variable
+    df['dashboard_var_label'] = df[dash_variable_dict[dash_variable][0]].apply(
+        lambda x: dash_variable_dict[dash_variable][3].format((x)))
 
-#     # modify the line itself
-#     fig.update_traces(
-#         mode="lines",
-#         line_color='#022B3A',
-#         hovertemplate="<br>".join([
-#             # "<b>%{x}</b><br>",
-#             "Median price / SF: <b>%{y}</b>",
-#             "Total sales: <b>%{customdata[0]:,.0f}</b>"
-#         ])
-#     )
+    # df_grouped = df.groupby('year-month').agg({
+    #     'price_sf': 'median',
+    #     'unique_ID': 'count',
+    #     'month': pd.Series.mode,
+    #     'year': pd.Series.mode,
+    # }).reset_index()
 
-#     # set chart title style variables
-#     chart_title_font_size = '17'
-#     chart_title_color = '#FFFFFF'
-#     chart_title_font_weight = '650'
+    # sort the data so that it's chronological
+    df = df.sort_values(['year', 'month'])
 
-#     chart_subtitle_font_size = '14'
-#     chart_subtitle_color = '#022B3A'
-#     chart_subtitle_font_weight = '650'
+    fig = px.line(
+        df,
+        x="year-month",
+        y=dash_variable_dict[dash_variable][0],
+        # custom_data=['unique_ID']
+    )
 
-#     if sub_geo == "":
-#         chart_title_text = "Countywide Median Price / SF"
-#     elif len(sub_geo) == 1:
-#         chart_title_text = f"{sub_geo[0]} Median Price / SF"
-#     elif len(sub_geo) == 2:
-#         chart_title_text = f"{sub_geo[0]} & {sub_geo[1]} Median Price / SF"
-#     else:
-#         chart_title_text = f"Median Price / SF For Selected Regions"
+    # modify the line itself
+    fig.update_traces(
+        mode="lines",
+        line_color='#022B3A',
+        hovertemplate="<br>".join([
+            "<b>%{y}</b>"
+        ])
+    )
 
-#     # update the fig
-#     fig.update_layout(
-#         title_text=f'<span style="font-size:{chart_title_font_size}px; font-weight:{chart_title_font_weight}; color:{chart_title_color}">{chart_title_text}</span><br><span style="font-size:{chart_subtitle_font_size}px; font-weight:{chart_subtitle_font_weight}; color:{chart_subtitle_color}"><i>Orange lines reflect range of selected years</i></span>',
-#         title_x=0,
-#         title_y=0.93,
-#         margin=dict(
-#             t=85
-#         ),
-#         hoverlabel=dict(
-#             bgcolor="rgba(255, 255, 255, 0.8)",
-#             bordercolor="#022B3A",
-#             font_size=16,  # set the font size of the chart tooltip
-#             font_color="#022B3A",
-#             align="left"
-#         ),
-#         yaxis=dict(
-#             linecolor="#022B3A",
-#             title=None,
-#             tickfont_color='#022B3A',
-#             tickfont_size=13,
-#             tickformat='$.0f',
-#             showgrid=False
-#         ),
-#         xaxis=dict(
-#             linecolor="#022B3A",
-#             linewidth=1,
-#             tickfont_color='#022B3A',
-#             title=None,
-#             tickangle=90,
-#             tickfont_size=13,
-#             tickformat='%b %Y',
-#             dtick='M3'
-#         ),
-#         height=460,
-#         hovermode="x unified")
+    # set chart title style variables
+    chart_title_font_size = '17'
+    chart_title_color = '#FFFFFF'
+    chart_title_font_weight = '650'
 
-#     # add shifting vertical lines
-#     year_start = {
-#         2018: '2018-1',
-#         2019: '2019-1',
-#         2020: '2020-1',
-#         2021: '2021-1',
-#         2022: '2022-1',
-#         2023: '2023-1'
-#     }
+    chart_subtitle_font_size = '14'
+    chart_subtitle_color = '#022B3A'
+    chart_subtitle_font_weight = '650'
 
-#     year_end = {
-#         2018: '2018-12',
-#         2019: '2019-12',
-#         2020: '2020-12',
-#         2021: '2021-12',
-#         2022: '2022-12',
-#         2023: '2023-4'
-#     }
+    if sub_geo == "":
+        chart_title_text = f"Countywide {dash_variable_dict[dash_variable][3].lower()}"
+    elif len(sub_geo) == 1:
+        chart_title_text = f"{sub_geo[0]} {dash_variable_dict[dash_variable][3].lower()}"
+    elif len(sub_geo) == 2:
+        chart_title_text = f"{sub_geo[0]} & {sub_geo[1]} {dash_variable_dict[dash_variable][3].lower()}"
+    else:
+        chart_title_text = f"{dash_variable_dict[dash_variable][3]} For Selected Regions"
 
-#     fig.add_vline(x=year_start[years[0]], line_width=2,
-#                   line_dash="dash", line_color="#FF8966")
-#     fig.add_vline(x=year_end[years[1]], line_width=2,
-#                   line_dash="dash", line_color="#FF8966")
+    # update the fig
+    fig.update_layout(
+        title_text=f'<span style="font-size:{chart_title_font_size}px; font-weight:{chart_title_font_weight}; color:{chart_title_color}">{chart_title_text}</span><br><span style="font-size:{chart_subtitle_font_size}px; font-weight:{chart_subtitle_font_weight}; color:{chart_subtitle_color}"><i>Orange lines reflect range of selected years</i></span>',
+        title_x=0,
+        title_y=0.93,
+        margin=dict(
+            t=85
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#022B3A",
+            font_size=16,  # set the font size of the chart tooltip
+            font_color="#022B3A",
+            align="left"
+        ),
+        yaxis=dict(
+            linecolor="#022B3A",
+            title=None,
+            tickfont_color='#022B3A',
+            tickfont_size=13,
+            tickformat=dash_variable_dict[dash_variable][4],
+            showgrid=False
+        ),
+        xaxis=dict(
+            linecolor="#022B3A",
+            linewidth=1,
+            tickfont_color='#022B3A',
+            title=None,
+            tickangle=90,
+            tickfont_size=13,
+            tickformat='%b %Y',
+            dtick='M3'
+        ),
+        height=460,
+        hovermode="x unified")
 
-#     return fig
+    # add shifting vertical lines
+    year_start = {
+        2018: '2018-1',
+        2019: '2019-1',
+        2020: '2020-1',
+        2021: '2021-1',
+        2022: '2022-1',
+        2023: '2023-1'
+    }
+
+    year_end = {
+        2018: '2018-12',
+        2019: '2019-12',
+        2020: '2020-12',
+        2021: '2021-12',
+        2022: '2022-12',
+        2023: '2023-6'
+    }
+
+    fig.add_vline(x=year_start[years[0]], line_width=2,
+                  line_dash="dash", line_color="#FF8966")
+    fig.add_vline(x=year_end[years[1]], line_width=2,
+                  line_dash="dash", line_color="#FF8966")
+
+    return fig
 
 
 # define columns for the first "row" of map, KPIs, and chart
 col1, col2, col3 = st.columns([
-    2.5,  # map column
+    3,  # map column
     0.2,  # spacer column
-    3  # KPI / chart column
+    2.5  # KPI / chart column
 ])
 
+if map_view == '2D':
+    col1.pydeck_chart(mapper_2D(), use_container_width=True)
+    with col1:
+        expander = st.expander("Notes")
+        expander.markdown(
+            f"<span style='color:#022B3A'> Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
+    col3.plotly_chart(plotly_charter(), use_container_width=True,
+                      config={'displayModeBar': False})
+else:
+    col1.pydeck_chart(mapper_3D(), use_container_width=True)
+    with col1:
+        col1.markdown("<span style='color:#022B3A'><b>Shift + click</b> in 3D view to rotate and change map angle. Census tract 'height' represents total sales. Darker colors represent higher median sales price / SF.</span>", unsafe_allow_html=True)
+        expander = st.expander("Notes")
+        expander.markdown(
+            f"<span style='color:#022B3A'>Census tract 'height' representative of total sales per tract. Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
+    col3.plotly_chart(plotly_charter(), use_container_width=True,
+                      config={'displayModeBar': False})
 
-# if map_view == '2D':
-#     col1.pydeck_chart(mapper_2D(), use_container_width=True)
-# else:
-#     col1.pydeck_chart(mapper_3D(), use_container_width=True)
+# draw logo at lower-right corner of dashboard
+im = Image.open('Content/logo.png')
+with col3:
+    subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
+    # with subcol
+    subcol3.write("Powered by:")
+    subcol3.image(im, width=80)
 
 # # kpi values
 # total_sales = '{:,.0f}'.format(filter_data()[1]['unique_ID'].sum())
@@ -651,31 +699,18 @@ col1, col2, col3 = st.columns([
 
 # # draw the plotly line chart
 # col3.plotly_chart(charter(), use_container_width=True, config={
-#                   'displayModeBar': False}, help='test')
+#                   'displayModeBar': False})
 
-# define columns for the second "row" of notes & logo
-col1, col2 = st.columns([
-    2,    # expander notes column
-    1     # logo column
-])
+# # define columns for the second "row" of notes & logo
+# col1, col2 = st.columns([
+#     2,    # expander notes column
+#     1     # logo column
+# ])
 
-# put expander explanatory text
-if map_view == '2D':
-    with col1:
-        expander = st.expander("Notes")
-        expander.markdown(
-            f"<span style='color:#022B3A'> Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
-else:
-    with col1:
-        col1.markdown("<span style='color:#022B3A'><b>Shift + click</b> in 3D view to rotate and change map angle. Census tract 'height' represents total sales. Darker colors represent higher median sales price / SF.</span>", unsafe_allow_html=True)
-        expander = st.expander("Notes")
-        expander.markdown(
-            f"<span style='color:#022B3A'>Census tract 'height' representative of total sales per tract. Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
-
-# Draw ARC logo at the bottom of the page
-im = Image.open('Content/logo.png')
-with col2:
-    subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
-    # with subcol
-    subcol2.write("Powered by:")
-    subcol3.image(im, width=80)
+# # Draw ARC logo at the bottom of the page
+# im = Image.open('Content/logo.png')
+# with col2:
+#     subcol1, subcol2, subcol3 = st.columns([1, 1, 1])
+#     # with subcol
+#     subcol2.write("Powered by:")
+#     subcol3.image(im, width=80)
