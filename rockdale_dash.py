@@ -417,7 +417,7 @@ def mapper_3D():
         filled=True,
         wireframe=False,
         extruded=True,
-        get_elevation='yr_built * 10',
+        get_elevation='yr_built * 25',
         get_fill_color='choro_color',
         get_line_color='choro_color',
         line_width_min_pixels=1
@@ -491,13 +491,6 @@ def plotly_charter():
     # create a 'label' column for the above variable
     df['dashboard_var_label'] = df[dash_variable_dict[dash_variable][0]].apply(
         lambda x: dash_variable_dict[dash_variable][3].format((x)))
-
-    # df_grouped = df.groupby('year-month').agg({
-    #     'price_sf': 'median',
-    #     'unique_ID': 'count',
-    #     'month': pd.Series.mode,
-    #     'year': pd.Series.mode,
-    # }).reset_index()
 
     # sort the data so that it's chronological
     df = df.sort_values(['year', 'month'])
