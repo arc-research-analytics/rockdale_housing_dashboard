@@ -190,8 +190,8 @@ else:
 # dropdown to select the basemap
 base_map = st.sidebar.selectbox(
     'Base map',
-    ('Streets', 'Satellite', 'Gray'),
-    index=2,
+    ('Dark', 'Light', 'Satellite', 'Streets'),
+    index=1,
     help='Change underlying base map.'
 )
 
@@ -199,7 +199,8 @@ base_map = st.sidebar.selectbox(
 base_map_dict = {
     'Streets': 'road',
     'Satellite': 'satellite',
-    'Gray': 'light'
+    'Light': 'light',
+    'Dark': 'dark'
 }
 
 # sidebar^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -356,7 +357,8 @@ def mapper_2D():
         initial_view_state=initial_view_state,
         map_provider='mapbox',
         map_style=base_map_dict[base_map],
-        tooltip=tooltip)
+        tooltip=tooltip
+    )
 
     return r
 
