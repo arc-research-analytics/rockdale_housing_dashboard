@@ -676,7 +676,7 @@ if map_view == '2D':
 else:
     col1.pydeck_chart(mapper_3D(), use_container_width=True)
     with col1:
-        col1.markdown("<span style='color:#022B3A'><b>Shift + click</b> in 3D view to rotate and change map angle. Census tract 'height' represents total sales. Darker colors represent higher median sales price / SF.</span>", unsafe_allow_html=True)
+        col1.markdown("<span style='color:#022B3A'><b>Shift + click</b> in 3D view to rotate and change map angle. Census tract 'height' represents total sales. Darker colors represent higher median home sale prices.</span>", unsafe_allow_html=True)
         expander = st.expander("Notes")
         expander.markdown(
             f"<span style='color:#022B3A'>Census tract 'height' representative of total sales per tract. Darker shades of Census tracts represent higher sales prices per SF for the selected time period. Dashboard excludes non-qualified, non-market, and bulk transactions. Excludes transactions below $1,000 and homes smaller than 75 square feet. Data downloaded from {county_var} County public records on September 15, 2023.</span>", unsafe_allow_html=True)
