@@ -653,7 +653,7 @@ with col3:
             f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>{years[0]} to {years[1]} change</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{KPI_dict[dash_variable][1]}</span>", unsafe_allow_html=True)
     else:
         subcol2.markdown(
-            f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>No year over year change<br>given slider selection.</span>", unsafe_allow_html=True)
+            f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>No year over year change<br>for single year selection.</span>", unsafe_allow_html=True)
 
     # Metric to be kept constant regardless of dashboard variable (median vintage)
     subcol1.markdown(f"<span style='color:{KPI_label_font_color}; font-size:{KPI_label_font_size}px; font-weight:{KPI_label_font_weight}'>Median vintage</span><br><span style='color:{KPI_value_font_color}; font-size:{KPI_value_font_size}px; font-weight:{KPI_value_font_weight}; line-height: {KPI_line_height}px'>{median_vintage}</span>", unsafe_allow_html=True)
