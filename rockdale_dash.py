@@ -609,7 +609,7 @@ delta_total_sales = '{:.1%}'.format((df_secondYear['price_sf'].count() -
                                      df_firstYear['price_sf'].count()) / df_firstYear['price_sf'].count())
 delta_price_sf = '{:.1%}'.format((df_secondYear['price_sf'].median() -
                                   df_firstYear['price_sf'].median()) / df_firstYear['price_sf'].median())
-delta_price = '{:.2%}'.format((df_secondYear['sale_price'].median() -
+delta_price = '{:.1%}'.format((df_secondYear['sale_price'].median() -
                                df_firstYear['sale_price'].median()) / df_firstYear['sale_price'].median())
 
 # dictionary to pick out which KPI metrics to show
