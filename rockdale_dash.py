@@ -551,7 +551,8 @@ def plotly_charter():
             tickfont_color='#022B3A',
             tickfont_size=13,
             tickformat=dash_variable_dict[dash_variable][4],
-            showgrid=False
+            showgrid=False,
+            zeroline=False
         ),
         xaxis=dict(
             linecolor="#022B3A",
@@ -563,7 +564,7 @@ def plotly_charter():
             tickformat='%b %Y',
             dtick='M6'
         ),
-        height=480,
+        height=450,
         hovermode="x unified")
 
     # add shifting vertical lines
